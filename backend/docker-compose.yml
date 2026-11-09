@@ -1,0 +1,61 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: chatbot-ollama
+    restart: unless-stopped
+    environment:
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-30m}   # mantiene el modelo en RAM entre preguntas
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_MAX_LOADED_MODELS: "1"
+    volumes:
+      - ollama_data:/root/.ollama                    # el modelo persiste entre reinicios
+    expose:
+      - "11434"                                      # solo visible dentro de la red de Docker
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks: [internal]
+
+  api:
+    build: .
+    container_name: chatbot-api
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+      model-puller:
+        condition: service_completed_successfully
+    env_file: .env
+    environment:
+      OLLAMA_URL: http://ollama:11434
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks: [internal]
+
+  model-puller:
+    image: ollama/ollama:latest
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command: ['ollama pull "$${OLLAMA_MODEL:-qwen2.5:1.5b}"']
+    networks: [internal]
+
+volumes:
+  ollama_data:
+
+networks:
+  internal:
