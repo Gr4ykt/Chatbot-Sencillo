@@ -1,0 +1,20 @@
+services:
+  web:
+    build: .
+    image: chatbot-frontend
+    container_name: chatbot-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    environment:
+      BACKEND_HOST: ${BACKEND_HOST:?Define BACKEND_HOST en el archivo .env}
+      BACKEND_PORT: ${BACKEND_PORT:-8000}
+      # Solo sustituir variables BACKEND_*, para no tocar $host, $uri, etc.
+      NGINX_ENVSUBST_FILTER: "^BACKEND_"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
